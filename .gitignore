@@ -1,0 +1,19 @@
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Local model cache (if using local paths)
+models/
+.cache/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Build outputs
+dist/
+build/
+
+# Personal workspace settings
+.vscode/
+.idea/

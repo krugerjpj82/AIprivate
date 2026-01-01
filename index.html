@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Private AI Hub PRO</title>
+    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIlByaXZhdGUgQUkgUHJvIiwKICAic2hvcnRfbmFtZSI6ICJQQUkgUHJvIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwZjBmMGYiLAogICJ0aGVtZV9jb2xvciI6ICIjMGYwZjBmIiwKICAiaWNvbnMiOiBbCiAgICB7ICJzcmMiOiAiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsaXRpY29uLmNvbS81MTIvMjEwMy8yMTAzNjMzLnBuZyIsICJzaXplcyI6ICI1MTJ4NTEyIiwgInR5cGUiOiAiaW1hZ2UvcG5nIiB9CiAgXQp9">
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2"></script>
+    <style>
+        :root { --bg: #0f0f0f; --surf: #1a1a1a; --prim: #4facfe; --text: #f0f0f0; --accent: #ff4b2b; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        
+        nav { background: var(--surf); display: flex; padding: 0 10px; border-bottom: 1px solid #333; justify-content: space-between; align-items: center; }
+        .tab-btn { padding: 18px 15px; border: none; background: none; color: #666; cursor: pointer; font-size: 12px; font-weight: bold; }
+        .tab-btn.active { color: var(--prim); border-bottom: 2px solid var(--prim); }
+
+        /* Installation Button */
+        #install-btn { display: none; background: var(--prim); border: none; padding: 6px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; font-weight: bold; margin-right: 10px; }
+        #nuke-btn { background: var(--accent); border: none; padding: 6px 12px; border-radius: 20px; font-size: 11px; color: white; cursor: pointer; }
+
+        .content-area { flex: 1; display: none; overflow: hidden; flex-direction: column; }
+        .content-area.active { display: flex; }
+        #chat-history { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+        .msg { padding: 12px 18px; border-radius: 18px; max-width: 75%; font-size: 14px; }
+        .user { align-self: flex-end; background: var(--prim); color: #000; }
+        .ai { align-self: flex-start; background: #2a2a2a; }
+        
+        .input-area { padding: 20px; background: var(--surf); display: flex; gap: 12px; }
+        input { flex: 1; padding: 14px; border-radius: 10px; border: 1px solid #444; background: #121212; color: white; }
+        .btn-pro { background: var(--prim); color: black; border: none; padding: 0 25px; border-radius: 10px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <div style="display: flex;">
+            <button class="tab-btn active" onclick="showTab('chat')">CHAT</button>
+            <button class="tab-btn" onclick="showTab('files')">EXPLORER</button>
+        </div>
+        <div style="padding-right: 10px;">
+            <button id="install-btn">INSTALL APP</button>
+            <button id="nuke-btn" onclick="nukeData()">NUKE DATA</button>
+        </div>
+    </nav>
+
+    <div id="chat" class="content-area active">
+        <div id="chat-history"></div>
+        <div class="input-area">
+            <input type="text" id="chat-input" placeholder="Message local AI...">
+            <button class="btn-pro" id="send-btn">SEND</button>
+        </div>
+    </div>
+
+    <div id="files" class="content-area">
+        <div style="padding: 20px; text-align: center;">
+            <button class="btn-pro" style="padding: 15px 30px;" onclick="document.getElementById('f-up').click()">+ IMPORT FILES</button>
+            <input type="file" id="f-up" multiple style="display:none">
+            <div id="file-registry" style="margin-top: 20px; text-align: left;"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
+
+        // 1. Database and PWA Setup
+        const db = new Dexie("AI_Personal_Pro");
+        db.version(1).stores({ messages: '++id, role, text, timestamp', files: 'name, category' });
+
+        let deferredPrompt;
+        const installBtn = document.getElementById('install-btn');
+
+        // Handle PWA Installation
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installBtn.style.display = 'block';
+        });
+
+        installBtn.addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') installBtn.style.display = 'none';
+                deferredPrompt = null;
+            }
+        });
+
+        // 2. AI and UI Logic
+        let chatModel;
+        async function init() {
+            chatModel = await pipeline('text-generation', 'Xenova/SmolLM-360M-Instruct', { device: 'webgpu' });
+            const saved = await db.messages.orderBy('timestamp').toArray();
+            saved.forEach(m => renderMsg(m.role, m.text));
+        }
+
+        document.getElementById('send-btn').onclick = async () => {
+            const inp = document.getElementById('chat-input');
+            const text = inp.value.trim();
+            if (!text) return;
+
+            await db.messages.add({ role: 'user', text, timestamp: Date.now() });
+            renderMsg('user', text);
+            inp.value = '';
+
+            const res = await chatModel(text, { max_new_tokens: 100 });
+            const aiText = res[0].generated_text.replace(text, '').trim();
+            
+            await db.messages.add({ role: 'ai', text: aiText, timestamp: Date.now() });
+            renderMsg('ai', aiText);
+        };
+
+        function renderMsg(role, text) {
+            const d = document.createElement('div');
+            d.className = `msg ${role}`;
+            d.innerText = text;
+            document.getElementById('chat-history').appendChild(d);
+            return d;
+        }
+
+        window.nukeData = async () => {
+            if(confirm("Wipe all local AI history?")) {
+                await db.delete();
+                location.reload();
+            }
+        };
+
+        window.showTab = (id) => {
+            document.querySelectorAll('.content-area').forEach(c => c.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        };
+
+        init();
+    </script>
+</body>
+</html>
