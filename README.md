@@ -1,0 +1,2 @@
+# AIprivate
+offline ai model
