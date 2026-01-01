@@ -4,133 +4,230 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Private AI Hub PRO</title>
+    
     <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIlByaXZhdGUgQUkgUHJvIiwKICAic2hvcnRfbmFtZSI6ICJQQUkgUHJvIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiMwZjBmMGYiLAogICJ0aGVtZV9jb2xvciI6ICIjMGYwZjBmIiwKICAiaWNvbnMiOiBbCiAgICB7ICJzcmMiOiAiaHR0cHM6Ly9jZG4taWNvbnMtcG5nLmZsaXRpY29uLmNvbS81MTIvMjEwMy8yMTAzNjMzLnBuZyIsICJzaXplcyI6ICI1MTJ4NTEyIiwgInR5cGUiOiAiaW1hZ2UvcG5nIiB9CiAgXQp9">
+    
     <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2"></script>
+
     <style>
-        :root { --bg: #0f0f0f; --surf: #1a1a1a; --prim: #4facfe; --text: #f0f0f0; --accent: #ff4b2b; }
-        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        :root { --bg: #0f0f0f; --surf: #1a1a1a; --prim: #4facfe; --text: #f0f0f0; --accent: #ff4b2b; --success: #28a745; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
-        nav { background: var(--surf); display: flex; padding: 0 10px; border-bottom: 1px solid #333; justify-content: space-between; align-items: center; }
-        .tab-btn { padding: 18px 15px; border: none; background: none; color: #666; cursor: pointer; font-size: 12px; font-weight: bold; }
+        /* Navigation & Status */
+        nav { background: var(--surf); display: flex; padding: 0 10px; border-bottom: 1px solid #333; justify-content: space-between; align-items: center; z-index: 10; }
+        .tab-btn { padding: 18px 15px; border: none; background: none; color: #666; cursor: pointer; font-size: 12px; font-weight: bold; transition: 0.3s; }
         .tab-btn.active { color: var(--prim); border-bottom: 2px solid var(--prim); }
+        #status-bar { font-size: 10px; color: #555; text-align: center; padding: 4px; background: #000; letter-spacing: 1px; }
 
-        /* Installation Button */
-        #install-btn { display: none; background: var(--prim); border: none; padding: 6px 12px; border-radius: 20px; font-size: 11px; cursor: pointer; font-weight: bold; margin-right: 10px; }
-        #nuke-btn { background: var(--accent); border: none; padding: 6px 12px; border-radius: 20px; font-size: 11px; color: white; cursor: pointer; }
+        /* Setup / Model Selection Screen */
+        #setup-screen { position: fixed; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; padding: 20px; text-align: center; }
+        .model-card { background: var(--surf); padding: 25px; border-radius: 15px; border: 1px solid #333; width: 100%; max-width: 400px; margin-bottom: 20px; }
+        #progress-container { width: 100%; max-width: 400px; background: #333; height: 8px; border-radius: 4px; margin: 20px 0; display: none; overflow: hidden; }
+        #progress-bar { width: 0%; height: 100%; background: var(--prim); transition: width 0.2s; }
 
+        /* Main App Layout */
         .content-area { flex: 1; display: none; overflow: hidden; flex-direction: column; }
         .content-area.active { display: flex; }
-        #chat-history { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
-        .msg { padding: 12px 18px; border-radius: 18px; max-width: 75%; font-size: 14px; }
-        .user { align-self: flex-end; background: var(--prim); color: #000; }
-        .ai { align-self: flex-start; background: #2a2a2a; }
-        
-        .input-area { padding: 20px; background: var(--surf); display: flex; gap: 12px; }
-        input { flex: 1; padding: 14px; border-radius: 10px; border: 1px solid #444; background: #121212; color: white; }
-        .btn-pro { background: var(--prim); color: black; border: none; padding: 0 25px; border-radius: 10px; font-weight: bold; cursor: pointer; }
+
+        /* Chat Styles */
+        #chat-history { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; scroll-behavior: smooth; }
+        .msg { padding: 12px 18px; border-radius: 18px; max-width: 80%; font-size: 14px; line-height: 1.5; }
+        .user { align-self: flex-end; background: var(--prim); color: #000; font-weight: 500; }
+        .ai { align-self: flex-start; background: #2a2a2a; border: 1px solid #333; }
+        .input-area { padding: 20px; background: var(--surf); display: flex; gap: 12px; border-top: 1px solid #333; }
+        input { flex: 1; padding: 14px; border-radius: 10px; border: 1px solid #444; background: #121212; color: white; outline: none; }
+
+        /* Explorer Styles */
+        .file-row { display: flex; align-items: center; padding: 15px; border-bottom: 1px solid #2a2a2a; justify-content: space-between; }
+        .tag { font-size: 10px; padding: 4px 10px; border-radius: 5px; background: var(--success); font-weight: bold; }
+
+        /* Buttons */
+        .btn-pro { background: var(--prim); color: black; border: none; padding: 12px 24px; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .btn-pro:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-nuke { background: var(--accent); color: white; font-size: 10px; padding: 5px 10px; border-radius: 5px; border: none; cursor: pointer; }
     </style>
 </head>
 <body>
 
+    <div id="status-bar">SYSTEM OFFLINE</div>
+
+    <div id="setup-screen">
+        <div class="model-card">
+            <h2 style="margin-top:0">Initialize AI Core</h2>
+            <p id="setup-status" style="color: #888; font-size: 14px;">Select a model to download to local storage.</p>
+            
+            <div id="progress-container">
+                <div id="progress-bar"></div>
+            </div>
+
+            <div style="display: grid; gap: 10px;">
+                <button id="fast-btn" class="btn-pro" style="background: var(--success);">⚡ FAST MODE (135MB)</button>
+                <button id="smart-btn" class="btn-pro">🧠 SMART MODE (700MB)</button>
+            </div>
+        </div>
+        <p style="font-size: 12px; color: #444;">WebGPU Required. No data ever leaves your device.</p>
+    </div>
+
     <nav>
         <div style="display: flex;">
-            <button class="tab-btn active" onclick="showTab('chat')">CHAT</button>
+            <button class="tab-btn active" onclick="showTab('chat')">SECURE CHAT</button>
             <button class="tab-btn" onclick="showTab('files')">EXPLORER</button>
         </div>
-        <div style="padding-right: 10px;">
-            <button id="install-btn">INSTALL APP</button>
-            <button id="nuke-btn" onclick="nukeData()">NUKE DATA</button>
+        <div>
+            <button id="install-btn" style="display:none; font-size:10px; margin-right:10px;">INSTALL</button>
+            <button class="btn-nuke" onclick="nukeData()">WIPE DATA</button>
         </div>
     </nav>
 
     <div id="chat" class="content-area active">
         <div id="chat-history"></div>
         <div class="input-area">
-            <input type="text" id="chat-input" placeholder="Message local AI...">
+            <input type="text" id="chat-input" placeholder="Type a message..." autocomplete="off">
             <button class="btn-pro" id="send-btn">SEND</button>
         </div>
     </div>
 
     <div id="files" class="content-area">
-        <div style="padding: 20px; text-align: center;">
-            <button class="btn-pro" style="padding: 15px 30px;" onclick="document.getElementById('f-up').click()">+ IMPORT FILES</button>
+        <div style="padding: 20px; border-bottom: 1px solid #333; text-align: center;">
+            <button class="btn-pro" onclick="document.getElementById('f-up').click()">+ SCAN LOCAL FILES</button>
             <input type="file" id="f-up" multiple style="display:none">
-            <div id="file-registry" style="margin-top: 20px; text-align: left;"></div>
         </div>
+        <div id="file-registry" style="flex:1; overflow-y: auto;"></div>
     </div>
 
     <script type="module">
         import { pipeline } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2';
 
-        // 1. Database and PWA Setup
+        // 1. Database Setup
         const db = new Dexie("AI_Personal_Pro");
         db.version(1).stores({ messages: '++id, role, text, timestamp', files: 'name, category' });
 
-        let deferredPrompt;
-        const installBtn = document.getElementById('install-btn');
-
-        // Handle PWA Installation
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            installBtn.style.display = 'block';
-        });
-
-        installBtn.addEventListener('click', async () => {
-            if (deferredPrompt) {
-                deferredPrompt.prompt();
-                const { outcome } = await deferredPrompt.userChoice;
-                if (outcome === 'accepted') installBtn.style.display = 'none';
-                deferredPrompt = null;
-            }
-        });
-
-        // 2. AI and UI Logic
-        let chatModel;
-        async function init() {
-            chatModel = await pipeline('text-generation', 'Xenova/SmolLM-360M-Instruct', { device: 'webgpu' });
-            const saved = await db.messages.orderBy('timestamp').toArray();
-            saved.forEach(m => renderMsg(m.role, m.text));
-        }
-
-        document.getElementById('send-btn').onclick = async () => {
-            const inp = document.getElementById('chat-input');
-            const text = inp.value.trim();
-            if (!text) return;
-
-            await db.messages.add({ role: 'user', text, timestamp: Date.now() });
-            renderMsg('user', text);
-            inp.value = '';
-
-            const res = await chatModel(text, { max_new_tokens: 100 });
-            const aiText = res[0].generated_text.replace(text, '').trim();
-            
-            await db.messages.add({ role: 'ai', text: aiText, timestamp: Date.now() });
-            renderMsg('ai', aiText);
+        // 2. State Management
+        const state = {
+            chatModel: null,
+            fileModel: null,
+            deferredPrompt: null
         };
 
+        // 3. UI Selectors
+        const ui = {
+            setup: document.getElementById('setup-screen'),
+            status: document.getElementById('status-bar'),
+            setupStatus: document.getElementById('setup-status'),
+            progCont: document.getElementById('progress-container'),
+            progBar: document.getElementById('progress-bar'),
+            history: document.getElementById('chat-history'),
+            input: document.getElementById('chat-input'),
+            files: document.getElementById('file-registry')
+        };
+
+        // 4. Initialization & Model Loading
+        const loadAI = async (tier) => {
+            const models = { fast: 'Xenova/SmolLM2-135M-Instruct', smart: 'Xenova/Llama-3.2-1B-Instruct' };
+            ui.progCont.style.display = 'block';
+            document.getElementById('fast-btn').disabled = true;
+            document.getElementById('smart-btn').disabled = true;
+
+            try {
+                // Main Chat Model
+                state.chatModel = await pipeline('text-generation', models[tier], {
+                    device: 'webgpu',
+                    progress_callback: (p) => {
+                        if (p.status === 'progress') {
+                            ui.progBar.style.width = p.progress + '%';
+                            ui.setupStatus.innerText = `Downloading ${tier.toUpperCase()} Core: ${Math.round(p.progress)}%`;
+                        }
+                    }
+                });
+
+                // Secondary Classifier for Explorer
+                ui.setupStatus.innerText = "Finalizing Secure Explorer...";
+                state.fileModel = await pipeline('zero-shot-classification', 'Xenova/mobilebert-uncased-mnli', { device: 'webgpu' });
+
+                // Load History & Hide Setup
+                const saved = await db.messages.orderBy('timestamp').toArray();
+                saved.forEach(m => renderMsg(m.role, m.text));
+                
+                ui.setup.style.display = 'none';
+                ui.status.innerText = `Status: ${tier.toUpperCase()} MODE (WEBGPU)`;
+            } catch (e) {
+                ui.setupStatus.innerText = "Error: WebGPU not found. Use Chrome/Edge.";
+                console.error(e);
+            }
+        };
+
+        // 5. Interaction Logic
+        document.getElementById('send-btn').onclick = async () => {
+            const text = ui.input.value.trim();
+            if (!text || !state.chatModel) return;
+
+            ui.input.value = '';
+            await db.messages.add({ role: 'user', text, timestamp: Date.now() });
+            renderMsg('user', text);
+
+            const aiBubble = renderMsg('ai', '...');
+            const out = await state.chatModel(text, { max_new_tokens: 128, temperature: 0.7 });
+            const aiResponse = out[0].generated_text.replace(text, '').trim();
+            
+            aiBubble.innerText = aiResponse;
+            await db.messages.add({ role: 'ai', text: aiResponse, timestamp: Date.now() });
+        };
+
+        document.getElementById('f-up').onchange = async (e) => {
+            const uploaded = Array.from(e.target.files);
+            for (const f of uploaded) {
+                const row = document.createElement('div');
+                row.className = 'file-row';
+                row.innerHTML = `<span>📄 ${f.name}</span> <span class="tag" style="background:#444">Scanning...</span>`;
+                ui.files.prepend(row);
+
+                const res = await state.fileModel(f.name, ['finance', 'work', 'personal', 'media', 'code']);
+                const cat = res.labels[0];
+                row.querySelector('.tag').innerText = cat.toUpperCase();
+                row.querySelector('.tag').style.background = 'var(--success)';
+                await db.files.put({ name: f.name, category: cat });
+            }
+        };
+
+        // 6. Helpers
         function renderMsg(role, text) {
             const d = document.createElement('div');
             d.className = `msg ${role}`;
             d.innerText = text;
-            document.getElementById('chat-history').appendChild(d);
+            ui.history.appendChild(d);
+            ui.history.scrollTop = ui.history.scrollHeight;
             return d;
         }
 
+        window.showTab = (id) => {
+            document.querySelectorAll('.content-area').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            event.target.classList.add('active');
+        };
+
         window.nukeData = async () => {
-            if(confirm("Wipe all local AI history?")) {
+            if(confirm("Permanently wipe all local AI history?")) {
                 await db.delete();
                 location.reload();
             }
         };
 
-        window.showTab = (id) => {
-            document.querySelectorAll('.content-area').forEach(c => c.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
+        // PWA Install Prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            state.deferredPrompt = e;
+            document.getElementById('install-btn').style.display = 'block';
+        });
+
+        document.getElementById('install-btn').onclick = () => {
+            state.deferredPrompt.prompt();
+            document.getElementById('install-btn').style.display = 'none';
         };
 
-        init();
+        document.getElementById('fast-btn').onclick = () => loadAI('fast');
+        document.getElementById('smart-btn').onclick = () => loadAI('smart');
     </script>
 </body>
 </html>
